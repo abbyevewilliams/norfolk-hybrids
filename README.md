@@ -1,5 +1,8 @@
 # Code for reproducing analyses from *Recent hybridisation and ghost introgression among a trio of island passerines.*
 
+Abby Williams, April 2026
+Email: abigail.williams (at) biology.ox.ac.uk
+
 In this repo:
 * popglen_config.txt: config file fpr running [PopGLen](https://github.com/zjnolen/PopGLen)
 * hard_call/: code for producing a 'hard call' dataset from ANGSD genotype likelihoods (beagle file).
