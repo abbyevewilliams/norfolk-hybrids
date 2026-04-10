@@ -1,0 +1,95 @@
+# Key variables
+
+export VCF=/data/biol-silvereye/ball6625/norfolk-analyses/hard_call/results/hard_call_min_prob_0.80_min_percent_90.reheader.variantIDs.vcf.gz
+export AUTOSOMES=$(cat autosomes.txt | tr '\n' ' ')
+
+# ---- MAKE PCA ----
+
+# 1. Make bed file from VCF
+plink --vcf $VCF --make-bed --out 01_0_autosomes --chr $AUTOSOMES --allow-extra-chr
+
+# 2. Prune for LD
+plink --bfile 01_0_autosomes --indep-pairwise 50 5 0.2 --allow-extra-chr --out 01_1_pruned
+plink --bfile 01_0_autosomes --extract 01_1_pruned.prune.in --make-bed --out 01_1_pruned --allow-extra-chr
+
+# 3. Filter for HWE
+plink --bfile 01_1_pruned --hwe 1e-6 --within popfile.txt --make-bed --out 01_2_hwe_filtered --allow-extra-chr
+
+# 4. Run PCA
+plink --bfile 01_2_hwe_filtered --pca 10 --out 01_3_pca --allow-extra-chr
+
+# ---- MAKE PCA FOR NORFOLK SAMPLES ONLY ----
+
+# Make bed file only containing Norfolk Island individuals
+plink --bfile 01_0_autosomes --keep NI_samples.txt --make-bed --out 02_0_NI_only --allow-extra-chr
+
+# 2. Prune for LD
+plink --bfile 02_0_NI_only --indep-pairwise 50 5 0.2 --allow-extra-chr --out 02_1_pruned
+plink --bfile 02_0_NI_only --extract 02_1_pruned.prune.in --make-bed --out 02_1_pruned --allow-extra-chr
+
+# 3. Filter for HWE
+plink --bfile 02_1_pruned --hwe 1e-6 --within popfile.txt --make-bed --out 02_2_hwe_filtered --allow-extra-chr
+
+# 4. Run PCA
+plink --bfile 02_2_hwe_filtered --pca 10 --out 02_3_pca_NI_only --allow-extra-chr
+
+# ---- CALCULATE RELATEDNESS ----
+
+# First we need a bed file which is unpruned but HWE filtered
+plink --bfile 01_0_autosomes --hwe 1e-6 --within popfile.txt --make-bed --out 03_0_unpruned_hwe_filtered --allow-extra-chr
+plink2 --bfile 03_0_unpruned_hwe_filtered --make-king-table --king-table-filter 0.05 --out 03_1_rel --allow-extra-chr
+
+# ---- REPEAT PCAS WITHOUT RELATED INDIVIDUALS ----
+
+# All samples
+plink --bfile 01_2_hwe_filtered --remove related.txt --make-bed --out 01_3_hwe_filtered_unrelated --allow-extra-chr
+plink --bfile 01_3_hwe_filtered_unrelated --pca 10 --out 01_4_pca_unrelated --allow-extra-chr
+
+# Norfolk island only
+plink --bfile 02_2_hwe_filtered --remove related.txt --make-bed --out 02_3_hwe_filtered_unrelated --allow-extra-chr
+plink --bfile 02_3_hwe_filtered_unrelated --pca 10 --out 02_4_pca_NI_only_unrelated --allow-extra-chr
+
+# ---- CHROMOSOME CONVERSION FOR ADMIXTURE ----
+
+# All samples - related included
+plink --bfile 01_2_hwe_filtered --make-bed --allow-extra-chr 0 --out 03_0_hwe_filtered_integer_chroms
+# Norfolk island only - related included
+plink --bfile 02_2_hwe_filtered --make-bed --allow-extra-chr 0 --out 03_0_hwe_filtered_integer_chroms_NI_only
+
+# All samples - related removed
+plink --bfile 01_3_hwe_filtered_unrelated --make-bed --allow-extra-chr 0 --out 03_0_hwe_filtered_integer_chroms_related_removed
+# Norfolk island only - related removed
+plink --bfile 02_3_hwe_filtered_unrelated --make-bed --allow-extra-chr 0 --out 03_0_hwe_filtered_integer_chroms_NI_only_related_removed
+
+# ---- THINNING FOR PHYLOGENOMICS ----
+
+plink --bfile 01_0_autosomes --indep-pairwise 50 5 0.2 --allow-extra-chr --out 04_0_pruned
+plink --bfile 01_0_autosomes --extract 04_0_pruned.prune.in --make-bed --out 04_0_pruned --allow-extra-chr
+plink --bfile 04_0_pruned --thin-count 100000 --allow-extra-chr --make-bed --out 04_1_thinned
+plink --bfile 04_1_thinned --allow-extra-chr --recode vcf --out 04_1_thinned
+
+# ---- IBD ----
+
+plink --bfile 01_2_hwe_filtered --genome --allow-extra-chr --out 05_ibd
+
+# ---- ROH ----
+
+plink --bfile 01_2_hwe_filtered --homozyg-kb 1000 --out 06_roh --allow-extra-chr
+
+# ---- SFS FOR VOLCANOFINDER ----
+
+plink2 --bfile 01_0_autosomes --keep NI_zlat_samples.txt --freq counts --out 07_0_NI_zlat_only --allow-extra-chr
+plink2 --bfile 01_0_autosomes --keep NZ_samples.txt --freq counts --out 07_0_NZ --allow-extra-chr
+
+# ---- VCF OUTPUT FOR HYDE ----
+
+plink --bfile 01_2_hwe_filtered --allow-extra-chr --recode vcf --out 01_2_hwe_filtered
+
+# --- VCF OUTPUT FOR TRIANGULAR ----
+
+plink --bfile 02_3_hwe_filtered_unrelated --allow-extra-chr --recode vcf --out 02_3_hwe_filtered_unrelated
+
+# ---- INPUT FOR ADMIXFROG ----
+
+plink --bfile 01_0_autosomes --allow-extra-chr 0 --keep source_only.txt --recode vcf --out 08_0_admixfrog_input_integer_chroms_source_only
+
