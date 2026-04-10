@@ -5,7 +5,7 @@ Abby Williams, April 2026
 Email: abigail.williams (at) biology.ox.ac.uk
 
 In this repo:
-* popglen_config.txt: config file fpr running [PopGLen](https://github.com/zjnolen/PopGLen)
+* popglen_config.yaml: config file fpr running [PopGLen](https://github.com/zjnolen/PopGLen)
 * hard_call/: code for producing a 'hard call' dataset from ANGSD genotype likelihoods (beagle file).
 * plink_commands.txt: list of plink commands used on 'hard call' dataset.
 * phylo/: code for reproducing phylogenomic analyses.
