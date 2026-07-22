@@ -12,4 +12,6 @@ In this repo:
 * hyde.sh: shell script for running [HyDe](https://github.com/pblischak/HyDe/tree/main) (hybridisation analyses).
 * dsuite.sh: shell script for running [Dsuite](https://github.com/millanek/Dsuite) (introgression analyses).
 * stats.sh: shell script for running [genomics_general](https://github.com/simonhmartin/genomics_general)
+* extract_genes.sh: shell script for extracting genes from top 1% of introgressed windows and extracting gene candidates in those windows.
+* triangular.Rmd: R markdown file for running TriangulaR package (https://github.com/omys-omics/triangulaR)
 
