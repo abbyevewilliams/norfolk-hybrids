@@ -1,0 +1,253 @@
+---
+title: "TriangulaR"
+output: html_notebook
+---
+
+# Setup
+
+```{r}
+
+library(tidyverse)
+library(SNPfiltR)
+library(vcfR)
+library(triangulaR)
+library(ggrepel)
+
+```
+
+# Data preparation and exploration
+
+First, reading in the data, which should be in VCF format, HW-filtered and not include any unrelated individuals.
+
+```{r}
+
+data <- read.vcfR("../data/02_3_hwe_filtered_unrelated.vcf", verbose = T)
+
+```
+
+We can also have a quick look:
+
+```{r}
+
+data
+
+```
+Another way of exploring our data is to check the SNP library with SNPfiltR:
+
+```{r}
+
+hard_filter(data)
+
+```
+Now, setting up a population map and doing some data wrangling:
+
+```{r}
+
+popmap <- read.table("../data/museum_contemporary_samples.tsv", 
+                     sep="\t", header=T) %>% 
+  mutate(population_full = case_when(
+    population == "zlat" ~ "Z. lateralis",
+    population == "zlat_hist" ~ "Z. lateralis (historical)",
+    population == "zten" ~ "Z. tenuirostris",
+    population == "zlat_zten" ~ "Z. lateralis x Z. tenuirostris",
+    population == "zalb" ~ "Z. albogularis",
+    population == "zlat_zalb" ~ "Z. lateralis x Z. albogularis",
+    population == "zten_hist" ~ "Z. tenuirostris (historical)"
+  ))
+
+popmap <- popmap %>% select(sample, population_full) %>% 
+  rename(id = sample, pop = population_full)
+
+# Remove related individual
+popmap <- popmap %>% filter(id!="AEB01_L0004")
+
+# Rename samples in popmap to match vcf
+popmap$id <- colnames(data@gt)[-1]
+
+```
+
+# Plotting Z. lateralis x Z. tenuirostris
+
+We first need to remove individuals with Z. albogularis ancestry.
+
+IMPORTANT NOTE: AEB01_L0004 has already been dropped in data prep stage because it was shown to be related to AEB01_L0003. 
+
+```{r}
+
+# Set names of individuals to drop
+inds_to_drop <- c("AEB01_L0001", "AEB01_L0007", "AEB01_L0009")
+
+# Get set difference
+ind_names <- colnames(data@gt)[-1]
+keep_inds <- setdiff(ind_names, inds_to_drop)
+
+# Subset dataset
+data_filt_zten <- data[, c(TRUE, colnames(data@gt)[-1] %in% keep_inds)]
+
+# Update the popmap
+popmap_filt_zten <- popmap %>% filter(!id %in% inds_to_drop)
+
+
+```
+
+Now preparing the Z. lateralis x Z. tenuirostris data for plotting:
+
+```{r}
+
+data_filt_zten_diff <- alleleFreqDiff(vcfR = data_filt_zten, pm = popmap_filt_zten, p1 = "Z. lateralis", p2 = "Z. tenuirostris", difference = 0.9)
+hi.het <- hybridIndex(vcfR = data_filt_zten_diff, pm = popmap_filt_zten, p1 = "Z. lateralis", p2 = "Z. tenuirostris")
+
+```
+
+Making triangle plot:
+
+```{r}
+colours <- c("#E9C46A", "#E9C46A", "#F4A259", "#D6745C", "#D6745C")
+zten_plot <- triangle.plot(hi.het, colors=colours) + 
+  theme(legend.title=element_blank(),
+        legend.position='none')+
+  geom_label_repel(aes(label = id), box.padding=0.5, max.overlaps=3,
+                   show.legend = F)
+zten_plot
+
+ggsave(zten_plot, filename="../plots/triangular/zten_triangle_plink_AEB01_L0004_removed.png", dpi=300, width = 3, height = 3)
+
+```
+
+# Plotting Z. lateralis x Z. albogularis
+
+First, dropping any individuals with Z. tenuirostris ancestry:
+
+```{r}
+# Set names of individuals to drop (any with tenuirostris ancestry)
+inds_to_drop <- c("AEB01_L0002", "AEB01_L0003", "AEB01_L0005",
+                  "AEB01_L0008", "AEB01_L0010",
+                  "NOR124_NOR124", "NOR125_NOR125", "NOR132_NOR132", 
+                  "NOR134_NOR134", "NOR140_NOR140", "NOR141_NOR141", 
+                  "NOR142_NOR142")
+
+# Get set difference
+ind_names <- colnames(data@gt)[-1]
+keep_inds <- setdiff(ind_names, inds_to_drop)
+
+# Subset dataset
+data_filt_zalb <- data[, c(TRUE, colnames(data@gt)[-1] %in% keep_inds)]
+
+# Update the popmap
+popmap_filt_zalb <- popmap %>% filter(!id %in% inds_to_drop)
+
+```
+
+
+Now making the triangle plot (same as above):
+
+```{r}
+
+data_filt_zalb_diff <- alleleFreqDiff(vcfR = data_filt_zalb, pm = popmap_filt_zalb, p1 = "Z. lateralis", p2 = "Z. albogularis", difference = 0.9)
+hi.het_zalb <- hybridIndex(vcfR = data_filt_zalb_diff, pm = popmap_filt_zalb, p1 = "Z. lateralis", p2 = "Z. albogularis")
+colours <- c("#64ACA3", "#E9C46A",  "#E9C46A", "#A2C75E")
+
+# plotting
+zalb_plot <- triangle.plot(hi.het_zalb, colors=colours) +
+  theme(legend.title=element_blank(),
+        legend.position='none') +
+  geom_label_repel(aes(label = id), box.padding=0.5, max.overlaps=1,
+                  show.legend = F)
+zalb_plot
+ggsave(zalb_plot, filename="../plots/triangular/zalb_triangle_plink.png", dpi=300, width = 3, height = 3)
+
+
+```
+
+Finally, create combined plot with patchwork package:
+
+```{r}
+
+combined <- zten_plot / zalb_plot
+
+ggsave(combined, filename="../plots/combined_triangle_plink.png", dpi=300, width = 5, height = 6)
+
+
+```
+
+# Check distribution of sites for each species
+
+```{r}
+
+# ------------- z. tenuirostris ----------------
+
+# Extract site characteristics
+fix_zten <- as.data.frame(getFIX(data_filt_zten_diff), stringsAsFactors=F)
+
+# Add position and chrom number
+fix_zten$POS <- as.numeric(fix_zten$POS)
+fix_zten$CHROM <- factor(fix_zten$CHROM, levels = unique(fix_zten$CHROM))
+
+# Calculate chromosome lengths from the data
+chr_lengths <- fix_zten %>%
+  group_by(CHROM) %>%
+  summarise(chr_length = max(POS)) %>%
+  arrange(CHROM)
+
+# Calculate cumulative offsets
+chr_lengths$offset <- c(0, cumsum(head(chr_lengths$chr_length, -1)))
+
+# Join offsets back to markers
+fix_zten <- left_join(fix_zten, chr_lengths, by = "CHROM")
+
+# Genome-wide coordinate
+fix_zten$genome_pos <- fix_zten$POS + fix_zten$offset
+
+# Count markers in 1 Mb windows
+bins_zten <- fix_zten %>%
+  mutate(bin = floor(genome_pos / 1e6) * 1e6) %>%
+  count(bin)
+
+distrib_plot_zten <- ggplot(bins_zten, aes(bin / 1e6, n)) +
+  geom_col(width = 1,fill="#D6745C") +
+  labs(x = "Genome position (Mb)",
+       y = "No. AIMs") +
+  theme_classic()+
+  ggtitle("Z. tenuirostris")
+
+# # ------------- z. albogularis  ----------------
+
+# Extract site characteristics
+fix_zalb <- as.data.frame(getFIX(data_filt_zalb_diff), stringsAsFactors=F)
+
+# Add position and chrom number
+fix_zalb$POS <- as.numeric(fix_zalb$POS)
+fix_zalb$CHROM <- factor(fix_zalb$CHROM, levels = unique(fix$CHROM))
+
+# Join offsets back to markers
+fix_zalb <- left_join(fix_zalb, chr_lengths, by = "CHROM")
+
+# Genome-wide coordinate
+fix_zalb$genome_pos <- fix_zalb$POS + fix_zalb$offset
+
+# Count markers in 1 Mb windows
+bins_zalb <- fix_zalb %>%
+  mutate(bin = floor(genome_pos / 1e6) * 1e6) %>%
+  count(bin)
+
+distrib_plot_zalb <- ggplot(bins_zalb, aes(bin / 1e6, n)) +
+  geom_col(width = 1,fill="#64ACA3") +
+  labs(x = "Genome position (Mb)",
+       y = "No. AIMs") +
+  theme_classic()+
+  ggtitle("Z. albogularis")
+
+# Make combined plot
+
+distrib_plot <-
+  distrib_plot_zten /
+  distrib_plot_zalb
+
+distrib_plot
+
+ggsave(distrib_plot, filename="../plots/triangular_distribution_1mb_windows.png", dpi=300, width = 8, height = 6)
+
+
+```
+
+
